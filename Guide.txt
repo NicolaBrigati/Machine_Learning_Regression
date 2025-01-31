@@ -1,0 +1,291 @@
+Used Libraries: Pandas, MatPlot, SkiLearn
+Used Alg: Logistic Regression, Decision Tree, Random Forest, 
+Method > after cleaning and set up data > combine this 3 Alg and grid  with the best params, value and estimators
+
+Objective: predict the price/disctrict of the houses
+
+
+activate venv from conda prompt:
+cd "C:\Users\nbrigati\OneDrive - Itron\Desktop\Machine Learning>" 
+ .\.venv\Scripts\activate
+
+lunch jupyter: jupyter notebook
+
+GET THE DATA
+import os
+import tarfile
+import urllib
+
+# URL del file da scaricare
+DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml/master/"
+HOUSING_URL = DOWNLOAD_ROOT + "datasets/housing/housing.tgz"
+
+# Percorso dove i dati saranno salvati
+HOUSING_PATH = os.path.join("../Data", "housing")
+
+# Funzione per scaricare il file
+def fetch_housing_data(housing_url=HOUSING_URL, housing_path=HOUSING_PATH):
+    if not os.path.exists(housing_path):  # Se la cartella non esiste, creala
+        os.makedirs(housing_path)
+
+    # Scarica il file
+    tgz_path = os.path.join(housing_path, "housing.tgz")
+    urllib.request.urlretrieve(housing_url, tgz_path)
+    print(f"File scaricato in: {tgz_path}")
+
+    # Estrai il file .tgz senza filtro o con un filtro che non influisce sull'estrazione
+    with tarfile.open(tgz_path) as housing_tgz:
+        # Rimuoviamo il filtro, estraiamo tutti i file
+        housing_tgz.extractall(path=housing_path)
+    print(f"File estratti in: {housing_path}")
+
+# Esegui la funzione per scaricare e estrarre il dataset
+fetch_housing_data()
+
+##############################
+2.8. Convert the data to a format you can easily manipulate
+
+import pandas as pd
+
+def load_housing_data(housing_path=HOUSING_PATH):
+    csv_path = os.path.join(housing_path, "housing.csv")
+    return pd.read_csv(csv_path)
+
+housing = load_housing_data()
+housing.head()
+
+
+###############################
+2.10. Check the size and type of data (time series, sample, geographical, etc.).
+housing.info()
+housing.describe()
+
+%matplotlib inline
+import matplotlib.pyplot as plt
+housing.hist(bins=50, figsize=(20,15))
+plt.show
+
+##################################
+2.11. Sample a test set, put it aside, and never look at it (no data snooping!).
+
+from sklearn.model_selection import train_test_split
+train_set, test_set = train_test_split(housing, test_size=0.2, random_state=42)
+train_set
+
+#### Stratfield sampling
+import numpy as np
+housing['income_cat'] = pd.cut(housing['median_income'],
+                              bins = [0, 1.5, 3, 4.5, 6, np.inf],
+                              labels = [1, 2, 3, 4, 5])
+housing[['median_income','income_cat']]
+
+
+############
+import numpy as np
+housing['income_cat'] = pd.cut(housing['median_income'],
+                              bins = [0, 1.5, 3, 4.5, 6, np.inf],
+                              labels = [1, 2, 3, 4, 5])
+housing['income_cat'].hist()
+plt.show()
+
+###########################
+Stratified sampling
+
+from sklearn.model_selection import StratifiedShuffleSplit
+split = StratifiedShuffleSplit(n_splits=1, test_size=0.20, random_state=42)
+for train_index, test_index in split.split(housing, housing['income_cat']):
+    strat_train_set = housing.loc[train_index]
+    strat_test_set = housing.loc[test_index]
+
+print("Category proportion for overall dataset:\n", housing['income_cat'].value_counts() / len(housing))
+print("Category proportion for stratified sampling:\n", strat_train_set['income_cat'].value_counts() / len(strat_train_set))
+
+
+#################################
+3. Explore the Data
+3.1. Create a copy of the data for exploration (sampling it down to a manageable size if necessary).¶
+#READ ME > Dependences problem with Profile Report and pandas_profiling
+#from pandas_profiling import ProfileReport
+#profile = ProfileReport(housing, title="Pandas Profiling Report")
+#profile.to_notebook_iframe()
+
+############
+3.3. For supervised learning tasks, identify the target attribute
+The target varable is housing_median_value column 
+
+############
+3.4. Visualize the data
+import matplotlib.pyplot as plt
+
+housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.4,
+             s=housing["population"]/100, label="population", figsize=(10,7),
+             c="median_house_value", cmap=plt.cm.jet, colorbar=True)
+plt.legend()
+plt.show()
+
+############
+3.6. Identify the promising transformations you may want to apply.
+housing["rooms_per_household"] = housing["total_rooms"] / housing["households"]
+housing["bedrooms_per_household"] = housing["total_bedrooms"] / housing["total_rooms"]
+housing["populations_per_household"] = housing["population"] / housing["households"]
+
+corr_matrix = housing.select_dtypes(include=['float64', 'int64']).corr()
+corr_matrix["median_house_value"].sort_values(ascending=False)
+
+####################################################
+4. Prepare the Data
+## Data cleaning.
+
+###create var housing_labels for point 5 below
+housing = strat_train_set.drop ("median_house_value", axis=1)
+housing_labels = strat_train_set["median_house_value"].copy()
+###
+
+- Fix or remove outliers (optional)
+- Fill in missing values (e.g., with zeros, mean, median...) or drop their rows (or columns) 
+#prepare data for missing data with the median of the column
+#calculate median of each column
+from sklearn.impute import SimpleImputer
+
+imputer = SimpleImputer(strategy = "median")
+housing_num = housing.drop("ocean_proximity", axis=1)
+imputer.fit(housing_num)
+print(imputer.statistics_)
+
+#########################
+NB: Use some dimensionality reduction technique if necessary (PCA, KernelPCA, LLE...)
+Not used in this exercise
+#########################
+4.3. Feature engineering, where appropriate.
+#manipulate columns for manage categorical var (like string)
+housing_cat = housing[['ocean_proximity']].reset_index()
+housing_cat.head()
+
+#convert column in a float
+from sklearn.preprocessing import OneHotEncoder
+
+cat_encoder = OneHotEncoder()
+housing_cat_1hot = cat_encoder.fit_transform(housing_cat)
+print(housing_cat_1hot)
+print(cat_encoder.categories_)
+
+### Aggregate features into promising new features (after 4.3)
+import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
+
+class CombineAttributeAdder(BaseEstimator, TransformerMixin):
+    def __init__(self, add_bedrooms_per_room=True):
+        self.add_bedrooms_per_room = add_bedrooms_per_room
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        # Supponendo che X sia un array numpy o DataFrame
+        rooms_ix = housing.columns.get_loc("total_rooms")
+        bedrooms_ix = housing.columns.get_loc("total_bedrooms")
+        population_ix = housing.columns.get_loc("population")
+        households_ix = housing.columns.get_loc("households")
+
+        rooms_per_household = X[:, rooms_ix] / X[:, households_ix]
+        population_per_household = X[:, population_ix] / X[:, households_ix]
+        if self.add_bedrooms_per_room:
+            bedrooms_per_room = X[:, bedrooms_ix] / X[:, rooms_ix]
+            return np.c_[X, rooms_per_household, population_per_household, bedrooms_per_room]
+        else:
+            return np.c_[X, rooms_per_household, population_per_household]
+
+# Uso corretto
+att_adder = CombineAttributeAdder(add_bedrooms_per_room=False)
+housing_extra_attribs = att_adder.transform(housing_num.values)
+###check column added:
+housing_extra_attribs.shape
+
+########### 4.4. Feauture scaling
+#scale features > set the same order of magnitude of the values
+from sklearn.preprocessing import StandardScaler #we take the min e max of each column and we divide each n of the column for the range
+#keep attention to the ouliers
+scaler = StandardScaler()
+housing_extra_attribs_scaled = scaler.fit_transform(housing_extra_attribs)
+housing_extra_attribs_scaled
+
+################## 4.4.1
+Reconstruct data
+use pipelines to automate all steps if possible:
+
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+#merge vars num and cat
+
+num_attribs = housing_num.columns.tolist()
+cat_attribs = ["ocean_proximity"]
+
+num_pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='median')),
+    ('attribs_adder', CombinedAttributeAdder()),
+    ('std_scaler', StandardScaler())
+])
+
+full_pipeline = ColumnTransformer([
+    ('num', num_pipeline, num_attribs),
+    ('cat', OneHotEncoder(), cat_attribs)
+])
+
+housing_prepared = full_pipeline.fit_transform(housing)
+housing_prepared
+
+
+#######################################
+#######################################
+Ready to use our ML Model
+#######################################
+
+5. Shortlisting Promising Models 
+5.1. Train many quick-and-dirty models from different categories (e.g., linear, naive Bayes, SVM, Random Forest, neural net, etc.) using standard parameters.¶
+
+###################test linear regression > create linear regression
+from sklearn.linear_model import LinearRegression
+lin_reg = LinearRegression()
+lin_reg.fit(housing_prepared, housing_labels)
+
+#Output from LR: 
+from sklearn.metrics import mean_squared_error #evaluate our model trough MSE
+#MSE = index of how much the predicted values ​​differ from those actually measured by the labels
+
+housing_predictions = lin_reg.predict(housing_prepared)
+lin_mse = mean_squared_error(housing_labels, housing_predictions)
+lin_rmse = np.sqrt(lin_mse)
+lin_rmse
+
+#result 68376.51$ > it is a high value, it indicates that the typical price of a house within a district has an error of that value, because the model is linear and the features are not distributed in a linear way 
+
+##################test decision tree
+#set decison tree:
+from sklearn.tree import DecisionTreeRegressor
+
+tree_reg = DecisionTreeRegressor()
+tree_reg.fit(housing_prepared, housing_labels)
+
+#see results:
+housing_predictions = tree_reg.predict(housing_prepared)
+tree_mse = mean_squared_error(housing_labels, housing_predictions)
+tree_rmse = np.sqrt(tree_mse)
+tree_rmse
+#result
+
+
+##################test random forest
+from sklearn.ensemble import RandomForestRegressor
+
+forest_reg = RandomForestRegressor()
+forest_reg.fit(housing_prepared, housing_labels)
+
+###
+housing_predictions = forest_reg.predict(housing_prepared)
+forest_mse = mean_squared_error(housing_labels, housing_predictions)
+forest_rmse = np.sqrt(forest_mse)
+forest_rmse
+
+#the result performe better the the other 2 as the error result 1860$
+
